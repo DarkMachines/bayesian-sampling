@@ -1,2 +1,3 @@
 # bayesian-sampling
-Bayesian Sampling Framework
+Framework for the Bayesian sampling challenge of DarkMachines.org. 
+
