@@ -10,6 +10,6 @@ Usage e.g.,
 
     from bilby_result_classes import MCMCResult, EmceeResult, PolyChordResult, MultiNestResult, DynestyResult
     bilby.run_sampler(..., sampler="pymultinest", result_class=MultiNestResult)
-    bilby.run_sampler(..., sampler="emcee", result_class=Emcee)
+    bilby.run_sampler(..., sampler="emcee", result_class=EmceeResult)
 
 The results will have nested sampling or MCMC specific methods. E.g., MCMC methods `rhat`, `ess` and `metric`, and NS methods `test`, `ess` and `metric`.
