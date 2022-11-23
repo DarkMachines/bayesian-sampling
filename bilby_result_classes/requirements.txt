@@ -4,3 +4,4 @@ arviz
 bilby
 numpy
 scipy
+nestcheck

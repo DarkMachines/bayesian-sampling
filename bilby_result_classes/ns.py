@@ -8,6 +8,7 @@ from functools import cached_property
 
 import os
 import pickle
+import shutil
 
 import numpy as np
 from scipy.special import xlogy
@@ -18,6 +19,9 @@ from anesthetic.utils import insertion_p_value
 
 from bilby.core.result import Result
 
+import nestcheck.error_analysis
+import nestcheck.data_processing
+from nestcheck.estimators import param_mean
 
 
 class NestedSamplingResult(Result, ABC):
@@ -27,6 +31,12 @@ class NestedSamplingResult(Result, ABC):
         samples = self.to_anesthetic()
         samples._compute_insertion_indexes()
         return samples
+
+    @abstractmethod
+    def to_nestcheck(self):
+        """
+        :returns: Nestcheck object
+        """
 
     @abstractmethod
     def to_anesthetic(self):
@@ -87,6 +97,16 @@ class NestedSamplingResult(Result, ABC):
             mean_var = np.mean(var, axis=1)
             return mean_var / var_mean
 
+        if method == "bootstrap":
+            run = self.to_nestcheck()
+            std_mean = nestcheck.error_analysis.run_std_bootstrap(run, [param_mean], n_simulate=nsamples)
+            var_mean = std_mean**2
+
+            mean = np.matmul(self.parameters, weights)
+            var = np.matmul(self.parameters**2, weights) - mean**2
+            mean_var = np.mean(var, axis=1)
+            return mean_var / var_mean
+
         raise RuntimeError(f"unknown method '{method}'")
 
     def metric(self, **kwargs):
@@ -120,6 +140,12 @@ class DynestyResult(NestedSamplingResult):
         """
         return dynesty_to_anesthetic(self.sampler)
 
+    def to_nestcheck(self):
+        """
+        :returns: nestcheck nested samples object
+        """
+        return nestcheck.data_processing.process_polychord_run(self.sampler)
+
     @property
     def nlike(self):
         return self.num_likelihood_evaluations
@@ -127,17 +153,30 @@ class DynestyResult(NestedSamplingResult):
 class PolyChordResult(NestedSamplingResult):
 
     @property
+    def basedir(self):
+        """
+        :returns: Base directory of output files
+        """
+        return os.path.join(self.outdir, "chains")
+
+    @property
     def root(self):
         """
         :returns: Root of output files
         """
-        return os.path.join(self.outdir, "chains", self.label)
+        return os.path.join(self.basedir, self.label)
 
     def to_anesthetic(self):
         """
         :returns: anethetic nested samples object
         """
         return anesthetic.read.polychord.read_polychord(self.root)
+
+    def to_nestcheck(self):
+        """
+        :returns: nestcheck nested samples object
+        """
+        return nestcheck.data_processing.process_polychord_run(self.label, self.basedir)
 
     @property
     def nlike(self):
@@ -147,17 +186,35 @@ class PolyChordResult(NestedSamplingResult):
 class MultiNestResult(NestedSamplingResult):
 
     @property
+    def basedir(self):
+        """
+        :returns: Base directory of output files
+        """
+        return os.path.join(self.outdir, f"pm_{self.label}")
+
+    @property
     def root(self):
         """
         :returns: Root of output files
         """
-        return os.path.join(self.outdir, f"pm_{self.label}", "")
+        return os.path.join(self.basedir, "")
 
     def to_anesthetic(self):
         """
         :returns: anethetic nested samples object
         """
         return anesthetic.read.multinest.read_multinest(self.root)
+
+    def to_nestcheck(self):
+        """
+        :returns: nestcheck nested samples object
+        """
+        # fix some IO silliness with dashes as bilby uses empty MN root parameter
+        shutil.copyfile(os.path.join(self.basedir, "dead-birth.txt"),
+                    os.path.join(self.basedir, "-dead-birth.txt"))
+        shutil.copyfile(os.path.join(self.basedir, "phys_live-birth.txt"),
+                    os.path.join(self.basedir, "-phys_live-birth.txt"))
+        return nestcheck.data_processing.process_multinest_run("", self.basedir)
 
     @property
     def nlike(self):
@@ -181,7 +238,7 @@ if __name__ == "__main__":
             result_class=MultiNestResult,
             )
 
-    methods = ["kish", "information", "mean"]
+    methods = ["kish", "information", "mean", "bootstrap"]
     ess = {method: res.ess(method=method) for method in methods}
     print(ess)
 
