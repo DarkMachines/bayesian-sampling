@@ -17,7 +17,7 @@ except ImportError:
     pass
 
 # Output folders
-label = 'rosenbrock'
+label = 'cmb'
 outdir = 'outdir'
 
 class MLFunction():
@@ -100,12 +100,12 @@ class CMB(MLFunction, bilby.Likelihood):
         self.modelname = 'lcdm'
         self.dim = 6
         self.x_mean = np.array([
-            0.95985349, 1.04158987, 0.02235954, 0.11994063, 0.05296935, 
+            0.95985349, 1.04158987, 0.02235954, 0.11994063, 0.05296935,
             3.06873361], np.float64)
         self.x_stdev = np.array([
-            0.00836984, 0.00168727, 0.00043045, 0.00470686, 0.00899083, 
+            0.00836984, 0.00168727, 0.00043045, 0.00470686, 0.00899083,
             0.02362278], np.float64)
-            
+
         self.y_mean = 381.7929565376543
         self.y_stdev = 1133.7707883293974
 
@@ -123,10 +123,11 @@ class CMB(MLFunction, bilby.Likelihood):
             ranges.append([x_min[i], x_max[i]])
         self.ranges = ranges
 
-        parameters = ['omega_b', 'omega_cdm', 'theta_s', 'ln[A_s]', 'n_s', 'tau_r']
-        labels = ['$\\omega_b$', '$\\omega_{cdm}$', '$\\theta_s$', '$ln[A_s]$', '$n_s$', '$\\tau_r$']
+        parameters = {'omega_b':0, 'omega_cdm':0, 'theta_s':0, 'ln[A_s]':0, 'n_s':0, 'tau_r':0}
+        labels = np.array(['$\\omega_b$', '$\\omega_{cdm}$', '$\\theta_s$', '$ln[A_s]$', '$n_s$', '$\\tau_r$'])
+        self.names = np.array(['omega_b', 'omega_cdm', 'theta_s', 'ln[A_s]', 'n_s', 'tau_r'])
 
-        #Uniform priors are assumed 
+        #Uniform priors are assumed
         priors = dict()
         i = 0
         for key in parameters:
@@ -139,13 +140,13 @@ class CMB(MLFunction, bilby.Likelihood):
     def log_likelihood(self):
         if self.model is None:
             self._load_model()
-        x = np.array([self.parameters["x{0}".format(i)] for i in range(self.dim)])
+        x = np.array([self.parameters[self.names[i]] for i in range(self.dim)])
         if len(x.shape) == 1:
             x = x.reshape(1, -1)
         x = self._normalise(x, self.x_mean, self.x_stdev)
         y = self.model.predict(x)
         y = self._unnormalise(y, self.y_mean, self.y_stdev)
-        return -y
+        return -y[0][0]
 
 class MSSM7(MLFunction, bilby.Likelihood):
     """
@@ -192,8 +193,9 @@ class MSSM7(MLFunction, bilby.Likelihood):
             ranges.append([x_min[i], x_max[i]])
         self.ranges = ranges
 
-        parameters = ['M2', 'mf2', 'mHu2', 'mHd2', 'Au', 'Ad', 'tanb', 'mt', 'alphas', 'rho0', 'sigmas', 'sigmal']
-        labels = ['$M_2$', '$m_f^2$', '$m_{H_u}^2$', '$m_{H_d}^2$', '$A_u$', '$A_d$', 'tan \\beta', '$m_t$', '$\\alpha_s$', '$\\rho_0$', '$\\sigma_s$', '$\\sigma_l$']
+        parameters = {'M2':0, 'mf2':0, 'mHu2':0, 'mHd2':0, 'Au':0, 'Ad':0, 'tanb':0, 'mt':0, 'alphas':0, 'rho0':0, 'sigmas':0, 'sigmal':0}
+        labels = np.array(['$M_2$', '$m_f^2$', '$m_{H_u}^2$', '$m_{H_d}^2$', '$A_u$', '$A_d$', 'tan \\beta', '$m_t$', '$\\alpha_s$', '$\\rho_0$', '$\\sigma_s$', '$\\sigma_l$'])
+        self.names = np.array(['M2', 'mf2', 'mHu2', 'mHd2', 'Au', 'Ad', 'tanb', 'mt', 'alphas', 'rho0', 'sigmas', 'sigmal'])
 
         #Uniform priors are assumed
         priors = dict()
@@ -209,19 +211,19 @@ class MSSM7(MLFunction, bilby.Likelihood):
     def log_likelihood(self):
         if self.model is None:
             self._load_model()
-        x = np.array([self.parameters["x{0}".format(i)] for i in range(self.dim)])
+        x = np.array([self.parameters[self.names[i]] for i in range(self.dim)])
         if len(x.shape) == 1:
             x = x.reshape(1, -1)
         x = self._normalise(x, self.x_mean, self.x_stdev)
         y = self.model.predict(x)
         y = self._unnormalise(y, self.y_mean, self.y_stdev)
-        return y
+        return y[0][0]
 
 class Rosenbrock(bilby.Likelihood):
     """
     N-dimensional Rosenbrock as defined in
     https://en.wikipedia.org/wiki/Rosenbrock_function
- 
+
     We take a = 1, b = 100
 
     Args:
@@ -248,7 +250,7 @@ class Rosenbrock(bilby.Likelihood):
         #Uniform priors are assumed
         priors = bilby.core.prior.PriorDict()
         priors.update({"x{0}".format(i): bilby.core.prior.Uniform(ranges[i][0], ranges[i][1], "x{0}".format(i)) for i in range(dim)})
-        
+
         self.priors = priors
 
         super(Rosenbrock, self).__init__(parameters=parameters)
@@ -296,9 +298,9 @@ class Rastrigin(bilby.Likelihood):
         self.priors = priors
 
         super(Rastrigin, self).__init__(parameters=parameters)
-                
+
     def log_likelihood(self):
-        x = np.array([self.parameters["x{0}".format(i)] for i in range(self.dim)])             
+        x = np.array([self.parameters["x{0}".format(i)] for i in range(self.dim)])
         y = self.a * self.dim
         for i in range(self.dim):
             y += np.power(x[i], 2) - self.a * np.cos(2 * np.pi * x[i])
@@ -311,7 +313,7 @@ class Himmelblau(bilby.Likelihood):
     https://en.wikipedia.org/wiki/Himmelblau%27s_function
 
     This is a 2-dimensional function with an application range bounded by -5
-    and 5 for both input variables. 
+    and 5 for both input variables.
 
     """
 
@@ -340,7 +342,7 @@ class Himmelblau(bilby.Likelihood):
         x = np.array([self.parameters["x{0}".format(i)] for i in range(self.dim)])
         y = np.power(np.power(x[0], 2) + x[1] - 11, 2) + np.power(x[0] + np.power(x[1], 2) - 7, 2)
         return -y
-    
+
 class EggBox(bilby.Likelihood):
     """
     N-dimensional EggBox as defined in arXiv:0809.3437.
@@ -389,8 +391,8 @@ class GaussianShells(bilby.Likelihood):
 
     """
     N-dimensional GaussianShells as defined in arXiv:0809.3437.
-    Both number of dimensions and number of rings are arbitrary but we assume that have 
-    an equal radius and widths 
+    Both number of dimensions and number of rings are arbitrary but we assume that have
+    an equal radius and widths
 
     Args:
         dimensionality: Number of input dimensions the function should take.
@@ -405,7 +407,7 @@ class GaussianShells(bilby.Likelihood):
             raise Exception("""Dimensionality of GaussianShells function has to
                             be >=2.""")
          if modes != len(c):
-            raise Exception("""Number of rings (modes) must be equal to number of centers (c""")   
+            raise Exception("""Number of rings (modes) must be equal to number of centers (c""")
          self.dim = dimensionality
          self.modes = modes
          self.r = r
@@ -447,9 +449,10 @@ class GaussianShells(bilby.Likelihood):
 #Functions are:
 #6D-CMB, 12D-MSSM7, nD-Rosenbrock, nD-Rastrigin, 2D-Himmelblau, nD-EggBox, nD-GaussianShells
 
-#Input is the number of dimensions for nD functions 
+#Input is the number of dimensions for nD functions
 dim = 2
-likelihood = Rosenbrock(dim)
+# likelihood = Rosenbrock(dim)
+likelihood = MSSM7()
 priors = likelihood.priors
 
 # And run sampler
