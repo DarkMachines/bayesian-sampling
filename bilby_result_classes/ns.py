@@ -100,7 +100,8 @@ class NestedSamplingResult(Result, ABC):
 
         if method == "bootstrap":
             run = self.to_nestcheck()
-            std_mean = nestcheck.error_analysis.run_std_bootstrap(run, [param_mean], n_simulate=nsamples)
+            std_mean = nestcheck.error_analysis.run_std_bootstrap(
+                run, [param_mean], n_simulate=nsamples)
             var_mean = std_mean**2
 
             mean = np.matmul(self.parameters, weights)
@@ -116,6 +117,7 @@ class NestedSamplingResult(Result, ABC):
         """
         return self.ess(**kwargs) / self.nlike
 
+
 def dynesty_to_anesthetic(results):
     """
     :returns: Dynesty results object in anesthetic
@@ -123,6 +125,7 @@ def dynesty_to_anesthetic(results):
     logL = results.logl
     logL_birth = logL[results.samples_it]
     return anesthetic.NestedSamples(data=results.samples, logL=logL, logL_birth=logL_birth)
+
 
 class DynestyResult(NestedSamplingResult):
 
@@ -152,6 +155,47 @@ class DynestyResult(NestedSamplingResult):
         return self.num_likelihood_evaluations
 
 
+class DynamicDynestyResult(Result):
+
+    @property
+    def unpickled_sampler(self):
+        """
+        :returns: Unpickled sampler object
+        """
+        n = os.path.join(self.outdir, f"{self.label}_resume.pickle")
+        with open(n, 'rb') as f:
+            return pickle.load(f)
+
+    def test(self):
+        """
+        """
+        return None
+
+    def metric(self, method="kish", **kwargs):
+        """
+        :returns: nestcheck nested samples object
+        """
+        if method != "kish":
+            return None
+        return self.ess() / self.nlike
+
+    def ess(self, method="kish", **kwargs):
+        """
+        See https://github.com/joshspeagle/dynesty/blob/ab78939b8e5df809121c320f38bec338825cd661/py/dynesty/sampler.py#L269
+
+        Algebraically, this equals Kish estimator.
+
+        :returns: Dynesty internal ESS estimate
+        """
+        if method != "kish":
+            return None
+        return self.unpickled_sampler.n_effective
+
+    @property
+    def nlike(self):
+        return self.num_likelihood_evaluations
+
+
 class UltraNestResult(Result):
 
     @property
@@ -165,8 +209,8 @@ class UltraNestResult(Result):
     def test(self):
         """
         See https://johannesbuchner.github.io/UltraNest/ultranest.html#ultranest.netiter.MultiCounter.insertion_order_runlength
-        
-        :returns: UltraNests' internal test
+
+        :returns: UltraNest internal test
         """
         return self.summary['insertion_order_MWW_test']
 
@@ -181,21 +225,98 @@ class UltraNestResult(Result):
     def ess(self, method="kish", **kwargs):
         """
         See https://github.com/JohannesBuchner/UltraNest/blob/aad770bc9b8a88ebd55ba2911d07e23f71606f38/ultranest/netiter.py#L916
-        
+
         ess = len(w) / (1.0 + ((len(w) * w - 1)**2).sum() / len(w))
-        
+
         Algebraically, this equals Kish estimator.
-        
-        :returns: UltraNests' internal ESS estimate
+
+        :returns: UltraNest internal ESS estimate
         """
         if method != "kish":
             return None
         return self.summary['ess']
- 
+
     @property
     def nlike(self):
         return self.num_likelihood_evaluations
 
+
+class JaxNSResult(Result):
+
+    @property
+    def summary(self):
+        """
+        """
+        with open(os.path.join(self.outdir, f"{self.label}_summary.txt"), "r") as f:
+            return f.readlines()
+
+    def test(self):
+        """
+        """
+        return None
+
+    def metric(self, method="kish", **kwargs):
+        """
+        """
+        if method != "kish":
+            return None
+        for line in self.summary:
+            if line.startswith("# likelihood evals / sample:"):
+                return 1. / float(line.split(":")[-1])
+
+    def ess(self, method="kish", **kwargs):
+        """        
+        :returns: JaxNS internal ESS estimate
+        """
+        if method != "kish":
+            return None
+        for line in self.summary:
+            if line.startswith("ESS="):
+                return 1. / float(line.split("=")[-1])
+
+    @property
+    def nlike(self):
+        for line in self.summary:
+            if line.startswith("# likelihood evals:"):
+                return 1. / float(line.split(":")[-1])
+
+
+class NessaiResult(Result):
+
+    @property
+    def summary(self):
+        """
+        """
+        with open(os.path.join(self.outdir, f"{self.label}_nessai", "result.json"), "r") as f:
+            return json.load(f)
+
+    def test(self):
+        """
+        :returns: Nessai implementation of insertion index test
+        """
+        return {"p_value": self.summary["final_p_value"], "ks_statistic": self.summary["final_ks_statistic"]}
+
+    def metric(self, method="kish", **kwargs):
+        """
+        """
+        if method != "kish":
+            return None
+        return self.ess() / self.nlike
+
+    def ess(self, method="kish", **kwargs):
+        """        
+        :returns: Kish estimate of ESS
+        """
+        if method != "kish":
+            return None
+        log_w = np.array(self.summary["nested_samples"]["logP"])
+        weights = np.exp(log_w - self.summary["log_evidence"])
+        weights /= weights.sum()
+        return 1. / np.sum(weights**2)
+
+    @property
+    def nlike(self):
+        return self.summary["total_likelihood_evaluations"]
 
 
 class PolyChordResult(NestedSamplingResult):
@@ -231,6 +352,7 @@ class PolyChordResult(NestedSamplingResult):
         with open(f"{self.root}.resume", "r") as f:
             return int(f.readlines()[21])
 
+
 class MultiNestResult(NestedSamplingResult):
 
     @property
@@ -259,16 +381,15 @@ class MultiNestResult(NestedSamplingResult):
         """
         # fix some IO silliness with dashes as bilby uses empty MN root parameter
         shutil.copyfile(os.path.join(self.basedir, "dead-birth.txt"),
-                    os.path.join(self.basedir, "-dead-birth.txt"))
+                        os.path.join(self.basedir, "-dead-birth.txt"))
         shutil.copyfile(os.path.join(self.basedir, "phys_live-birth.txt"),
-                    os.path.join(self.basedir, "-phys_live-birth.txt"))
+                        os.path.join(self.basedir, "-phys_live-birth.txt"))
         return nestcheck.data_processing.process_multinest_run("", self.basedir)
 
     @property
     def nlike(self):
         with open(f"{self.root}resume.dat", "r") as f:
             return int(f.readlines()[1].split()[1])
-
 
 
 if __name__ == "__main__":
@@ -279,13 +400,13 @@ if __name__ == "__main__":
     sampler = "ultranest"
 
     res = bilby.run_sampler(
-            likelihood=likelihood,
-            priors=priors,
-            sampler=sampler,
-            nlive=100,
-            label=sampler,
-            result_class=UltraNestResult,
-            )
+        likelihood=likelihood,
+        priors=priors,
+        sampler=sampler,
+        nlive=100,
+        label=sampler,
+        result_class=UltraNestResult,
+    )
 
     methods = ["kish", "information", "mean", "bootstrap"]
     ess = {method: res.ess(method=method) for method in methods}
