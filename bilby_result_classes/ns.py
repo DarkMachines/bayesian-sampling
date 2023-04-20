@@ -81,13 +81,23 @@ class NestedSamplingResult(Result, ABC):
         """
         :returns: Effective sample size of nested samples
         """
-        weights = self.weights(nsamples=nsamples)
+        weights = self.weights(nsamples=None)
 
         if method == "kish":
             sum_ = np.sum(weights**2, axis=0)
             return np.mean(1. / sum_)
 
         if method == "information":
+            sum_ = np.sum(weights**2, axis=0)
+            return np.mean(1. / sum_)
+
+        weights = self.weights(nsamples=nsamples)
+
+        if method == "unbiased_kish":
+            sum_ = np.sum(weights**2, axis=0)
+            return np.mean(1. / sum_)
+
+        if method == "unbiased_information":
             terms = xlogy(weights, weights)
             return np.mean(np.exp(-terms.sum(axis=0)))
 
@@ -152,7 +162,7 @@ class DynestyResult(NestedSamplingResult):
 
     @property
     def nlike(self):
-        return self.num_likelihood_evaluations
+        return sum(self.unpickled_sampler.ncall)
 
 
 class DynamicDynestyResult(Result):
@@ -193,7 +203,7 @@ class DynamicDynestyResult(Result):
 
     @property
     def nlike(self):
-        return self.num_likelihood_evaluations
+        return self.unpickled_sampler.ncall
 
 
 class UltraNestResult(Result):
@@ -238,7 +248,7 @@ class UltraNestResult(Result):
 
     @property
     def nlike(self):
-        return self.num_likelihood_evaluations
+        return self.summary['ncall']
 
 
 class JaxNSResult(Result):
@@ -250,6 +260,13 @@ class JaxNSResult(Result):
         with open(os.path.join(self.outdir, f"{self.label}_summary.txt"), "r") as f:
             return f.readlines()
 
+    @property
+    def result(self):
+        """
+        """
+        with open(os.path.join(self.outdir, f"{self.label}_result.json"), "r") as f:
+            return json.load(f)
+
     def test(self):
         """
         """
@@ -260,15 +277,15 @@ class JaxNSResult(Result):
         """
         if method != "kish":
             return None
-        for line in self.summary:
-            if line.startswith("# likelihood evals / sample:"):
-                return 1. / float(line.split(":")[-1])
+        return self.ess() / self.nlike
 
     def ess(self, method="kish", **kwargs):
         """        
+        See https://github.com/Joshuaalbert/jaxns/blob/aac93975dc019d6785c40853d98b8739b9356272/jaxns/internals/stats.py#L64        
+
         :returns: JaxNS internal ESS estimate
         """
-        if method != "kish":
+        if method != "unbiased_kish":
             return None
         for line in self.summary:
             if line.startswith("ESS="):
@@ -278,7 +295,7 @@ class JaxNSResult(Result):
     def nlike(self):
         for line in self.summary:
             if line.startswith("# likelihood evals:"):
-                return 1. / float(line.split(":")[-1])
+                return float(line.split(":")[-1])
 
 
 class NessaiResult(Result):
@@ -309,7 +326,7 @@ class NessaiResult(Result):
         """
         if method != "kish":
             return None
-        log_w = np.array(self.summary["nested_samples"]["logP"])
+        log_w = np.array(self.summary["posterior_samples"]["logP"])
         weights = np.exp(log_w - self.summary["log_evidence"])
         weights /= weights.sum()
         return 1. / np.sum(weights**2)
