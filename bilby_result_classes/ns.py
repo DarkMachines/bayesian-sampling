@@ -272,7 +272,7 @@ class JaxNSResult(Result):
             return None
         for line in self.summary:
             if line.startswith("ESS="):
-                return 1. / float(line.split("=")[-1])
+                return float(line.split("=")[-1])
 
     @property
     def nlike(self):
