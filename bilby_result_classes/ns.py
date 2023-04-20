@@ -9,6 +9,7 @@ from functools import cached_property
 import os
 import pickle
 import shutil
+import json
 
 import numpy as np
 from scipy.special import xlogy
@@ -150,6 +151,53 @@ class DynestyResult(NestedSamplingResult):
     def nlike(self):
         return self.num_likelihood_evaluations
 
+
+class UltraNestResult(Result):
+
+    @property
+    def summary(self):
+        """
+        :returns: Base directory of output files
+        """
+        with open(os.path.join(self.outdir, f"ultra_{self.label}", "info", "results.json"), "r") as f:
+            return json.load(f)
+
+    def test(self):
+        """
+        See https://johannesbuchner.github.io/UltraNest/ultranest.html#ultranest.netiter.MultiCounter.insertion_order_runlength
+        
+        :returns: UltraNests' internal test
+        """
+        return self.summary['insertion_order_MWW_test']
+
+    def metric(self, method="kish", **kwargs):
+        """
+        :returns: nestcheck nested samples object
+        """
+        if method != "kish":
+            return None
+        return self.ess() / self.nlike
+
+    def ess(self, method="kish", **kwargs):
+        """
+        See https://github.com/JohannesBuchner/UltraNest/blob/aad770bc9b8a88ebd55ba2911d07e23f71606f38/ultranest/netiter.py#L916
+        
+        ess = len(w) / (1.0 + ((len(w) * w - 1)**2).sum() / len(w))
+        
+        Algebraically, this equals Kish estimator.
+        
+        :returns: UltraNests' internal ESS estimate
+        """
+        if method != "kish":
+            return None
+        return self.summary['ess']
+ 
+    @property
+    def nlike(self):
+        return self.num_likelihood_evaluations
+
+
+
 class PolyChordResult(NestedSamplingResult):
 
     @property
@@ -228,7 +276,7 @@ if __name__ == "__main__":
     import bilby
     from example import priors, likelihood
 
-    sampler = "dynesty"
+    sampler = "ultranest"
 
     res = bilby.run_sampler(
             likelihood=likelihood,
@@ -236,7 +284,7 @@ if __name__ == "__main__":
             sampler=sampler,
             nlive=100,
             label=sampler,
-            result_class=DynestyResult,
+            result_class=UltraNestResult,
             )
 
     methods = ["kish", "information", "mean", "bootstrap"]

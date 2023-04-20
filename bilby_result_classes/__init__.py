@@ -10,4 +10,4 @@ The results will have nested sampling or MCMC specific methods.
 """
 
 from .mcmc import MCMCResult, EmceeResult
-from .ns import PolyChordResult, MultiNestResult, DynestyResult
+from .ns import PolyChordResult, MultiNestResult, DynestyResult, UltraNestResult
