@@ -60,7 +60,7 @@ class NestedSamplingResult(Result, ABC):
 
     @property
     def nlive(self):
-        return int(mode(self.anesthetic.nlive)[0][0])
+        return int(mode(self.anesthetic.nlive, keepdims=True)[0][0])
 
     def test(self, **kwargs):
         """
@@ -126,7 +126,7 @@ def dynesty_to_anesthetic(results):
 class DynestyResult(NestedSamplingResult):
 
     @property
-    def sampler(self):
+    def unpickled_sampler(self):
         """
         :returns: Unpickled sampler object
         """
@@ -138,13 +138,13 @@ class DynestyResult(NestedSamplingResult):
         """
         :returns: anethetic nested samples object
         """
-        return dynesty_to_anesthetic(self.sampler)
+        return dynesty_to_anesthetic(self.unpickled_sampler)
 
     def to_nestcheck(self):
         """
         :returns: nestcheck nested samples object
         """
-        return nestcheck.data_processing.process_polychord_run(self.sampler)
+        return nestcheck.data_processing.process_dynesty_run(self.unpickled_sampler)
 
     @property
     def nlike(self):
@@ -222,12 +222,13 @@ class MultiNestResult(NestedSamplingResult):
             return int(f.readlines()[1].split()[1])
 
 
+
 if __name__ == "__main__":
 
     import bilby
     from example import priors, likelihood
 
-    sampler = "pymultinest"
+    sampler = "dynesty"
 
     res = bilby.run_sampler(
             likelihood=likelihood,
@@ -235,7 +236,7 @@ if __name__ == "__main__":
             sampler=sampler,
             nlive=100,
             label=sampler,
-            result_class=MultiNestResult,
+            result_class=DynestyResult,
             )
 
     methods = ["kish", "information", "mean", "bootstrap"]
