@@ -272,10 +272,10 @@ class JaxNSResult(Result):
         """
         return None
 
-    def metric(self, method="kish", **kwargs):
+    def metric(self, method="unbiased_kish", **kwargs):
         """
         """
-        if method != "kish":
+        if method != "unbiased_kish":
             return None
         return self.ess() / self.nlike
 
